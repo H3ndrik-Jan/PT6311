@@ -1,24 +1,24 @@
 #include "pt6311.h"
 #include <SPI.h>
 
-pt6311::pt6311(int CS_pin, int num_Of_Digit){
-  CS = CS_pin;
+pt6311::pt6311(uint8_t STB_pin, uint8_t num_Of_Digit){
+  STB = STB_pin;
   numOfDigit = num_Of_Digit;
-  pinMode(CS, OUTPUT);
-  digitalWrite(CS, HIGH);
+  pinMode(STB, OUTPUT);
+  digitalWrite(STB, HIGH);
   SPI.begin();
   SPI.setBitOrder(LSBFIRST);
   SPI.setClockDivider(SPI_CLOCK_DIV128);
   SPI.setDataMode(SPI_MODE3);
   SendByte(COMMAND_2 | NORMAL_OPERATION_MODE | INCREMENT_ADDRESS | WRITE_DATA_TO_DISPLAY_MODE);
-  digitalWrite(CS, LOW);
+  digitalWrite(STB, LOW);
   SPI.transfer(COMMAND_3);
-  for (int i = 0; i < 13; i++) {
+  for (uint8_t i = 0; i < 13; i++) {
     SPI.transfer(0);
     SPI.transfer(0);
     SPI.transfer(0);
   }
-  digitalWrite(CS, HIGH);
+  digitalWrite(STB, HIGH);
   delayMicroseconds(spi_timeout);
   switch(numOfDigit){
     case 9:
@@ -52,13 +52,13 @@ pt6311::pt6311(int CS_pin, int num_Of_Digit){
   SendByte(COMMAND_4 | DISPLAY_ON | PULSE_WIDTH14);
   displayState = DISPLAY_ON;
   displayBrighthess = PULSE_WIDTH14;
-  for(int i = 0; i < 16; i++)buf[i] = 0;
+  for(uint8_t i = 0; i < 12; i++)displayBuffer[i] = ' ';
 };
 
-void pt6311::setBrightness(int br){ 
+void pt6311::setBrightness(uint8_t br){ 
       displayBrighthess = br;
       SendByte(COMMAND_4 | displayState | displayBrighthess);
-    };
+};
 
 void pt6311::displayOn(){
   displayState = DISPLAY_ON;
@@ -70,7 +70,7 @@ void pt6311::displayOff(){
   SendByte(COMMAND_4 | displayState | displayBrighthess);
 }
 
-int pt6311::getBrightness(){ 
+uint8_t pt6311::getBrightness(){ 
   return displayBrighthess;
 }
 
@@ -78,32 +78,18 @@ bool pt6311::getState(){
   return displayState>0?true:false;
 }
 
-void pt6311::setDigit(int pos, char _data){ 
-  int data = symbolList[_data];
-  if(buf[pos] != data){
-    buf[pos] = data;
-    SendByte(COMMAND_2 | NORMAL_OPERATION_MODE | WRITE_DATA_TO_DISPLAY_MODE); //cmd2
-    digitalWrite(CS, LOW);
-    SPI.transfer(COMMAND_3 | (pos * 0x03));
-    SPI.transfer(byte(data));
-    SPI.transfer(byte(data >> 8));
-    SPI.transfer(byte(data >> 16));
-    digitalWrite(CS, HIGH);
-  }
-}
-
-void pt6311::SendByte(byte data) {
-  digitalWrite(CS, LOW);
+void pt6311::SendByte(uint8_t data) {
+  digitalWrite(STB, LOW);
   SPI.transfer(data);
-  digitalWrite(CS, HIGH);
+  digitalWrite(STB, HIGH);
   delayMicroseconds(spi_timeout);
 }
 
-void pt6311::setLeds(int data){
-  digitalWrite(CS, LOW);
-  SPI.transfer(0b01000001);	// write to LED port
+void pt6311::setLeds(uint8_t data){
+  digitalWrite(STB, LOW);
+  SPI.transfer(COMMAND_2 | NORMAL_OPERATION_MODE | INCREMENT_ADDRESS | WRITE_DATA_TO_LED_PORT);
   SPI.transfer(data);
-  digitalWrite(CS, HIGH);
+  digitalWrite(STB, HIGH);
 }
 
 void pt6311::ledWrite(uint8_t number, uint8_t state){
@@ -114,38 +100,34 @@ void pt6311::ledWrite(uint8_t number, uint8_t state){
 	setLeds(ledState_);
 }
 
-void pt6311::writeDigit(int pos, char _data){ 
-  int data = symbolList[_data];
-  if(buf[pos] != data){
-    buf[pos] = data;
-    SendByte(COMMAND_2 | NORMAL_OPERATION_MODE | WRITE_DATA_TO_DISPLAY_MODE); //cmd2
-    digitalWrite(CS, LOW);
-    SPI.transfer(COMMAND_3 | (pos * 0x03));
-	SPI.transfer(0b00000000);
-	digitalWrite(CS, HIGH);
-	//delayMicroseconds(40);
-	digitalWrite(CS, LOW);
-	SPI.transfer(COMMAND_3 | (pos * 0x03)+1);
-	SPI.transfer(0b00000000);
-	digitalWrite(CS, HIGH);
-	//delayMicroseconds(40);
-	digitalWrite(CS, LOW);
-	SPI.transfer(COMMAND_3 | (pos * 0x03)+2);
-	SPI.transfer(0b11111111);
-    digitalWrite(CS, HIGH);
 
-  }
+void pt6311::writeChar(uint8_t pos, unsigned char data){ 
+	displayBuffer[pos] = data;
 }
 
-void pt6311::cmd2(void){
-	digitalWrite(CS, LOW);
-	SPI.transfer(0b01000100);
+void pt6311::writeString(uint8_t pos, unsigned char data[]){
+	for(uint8_t i = pos; i<strlen((const char*)data)+pos; i++){
+		writeChar(i, data[i-pos]);
+	}
+}
+void pt6311::writeString(uint8_t pos, const char data[]){
+	for(uint8_t i = pos; i<strlen((const char*)data)+pos; i++){
+		writeChar(i, data[i-pos]);
+	}
 }
 
+void pt6311::setCursor(uint8_t pos){
+	digitalWrite(STB, LOW);
+	SPI.transfer(COMMAND_3 | (pos * 0x03));
+	digitalWrite(STB, HIGH);
+}
+
+void pt6311::getBytes(uint8_t *first, uint8_t *second, uint8_t pos){
+	uint8_t currentChar = displayBuffer[11-pos];
+	uint16_t data = pgm_read_word_near(alphafonttable+currentChar);
+	
+//Shuffle the bit positions to be compatible with your pinout.
 //bit permutation code generated using: http://programming.sirrida.de/calcperm.php
-void pt6311::writeChar(int pos, char _data){ 
-  uint16_t data = alphafonttable[_data];
-
 data = ((data & 0x00002000) << 1)
   | ((data & 0x00001002) << 3)
   | ((data & 0x00000020) << 6)
@@ -158,28 +140,63 @@ data = ((data & 0x00002000) << 1)
   | ((data & 0x00000250) >> 3)
   | ((data & 0x00000100) >> 1);
  
+ //Now reverse order of the bits
  uint16_t revData = 0;
-  for(int i=0;i<15;i++)
+  for(int i=0;i<16;i++)
      if(data & (1 << i)) revData |= 1 << (15-i);
-  
-  
-   SendByte(COMMAND_2 |NORMAL_OPERATION_MODE | WRITE_DATA_TO_DISPLAY_MODE); //cmd2
-	
-	//  digitalWrite(CS, LOW);
-  //SPI.transfer(0b01000000);
-//  digitalWrite(CS, HIGH);
-  delayMicroseconds(spi_timeout);
-	
-    digitalWrite(CS, LOW);
-    SPI.transfer(COMMAND_3 | (pos * 0x03));
-	SPI.transfer((byte)((revData >> 8)&0xFF));
-	digitalWrite(CS, HIGH);
-
-	digitalWrite(CS, LOW);
-	SPI.transfer(COMMAND_3 | ((pos * 0x03)+1));
-	SPI.transfer((byte)(revData & 0xFF));
-	//SPI.transfer(0b00000000);
-	digitalWrite(CS, HIGH);
-
+ 
+ *first =  (uint8_t)((revData >> 8)&0xFF);
+ *second = (uint8_t)(revData & 0xFF);
 }
 
+void pt6311::print(uint8_t pos, const char data[]){
+	writeString(pos, data);
+	setCursor(pos);
+	writeLine();
+}
+
+void pt6311::writeLine(){
+	uint8_t firstByte;
+	uint8_t secondByte;
+	digitalWrite(STB, LOW);
+	SPI.transfer(0b01000000);
+	for(int i = 0; i<12; i++){
+		getBytes(&firstByte, &secondByte, i);
+		SPI.transfer(firstByte);
+		SPI.transfer(secondByte);
+		SPI.transfer(0b00000000);	//write third unused byte to increment address
+	}
+	digitalWrite(STB, HIGH);
+}
+
+void pt6311::clearBuffer(void){
+	for(uint8_t i = 0; i<12; i++)
+		displayBuffer[i] = ' ';
+}
+
+void pt6311::readKeypad(){
+	displayOff();
+	digitalWrite(STB, LOW);
+	SPI.transfer(0b01000010);
+	for(int i = 0; i<6; i++){
+		keyStates_[i] = SPI.transfer(0b01000010);	//Read key data
+	}
+	digitalWrite(STB, HIGH);
+	displayOn();
+}
+
+bool pt6311::isPressed(uint8_t key){	//Returns true if the given key has been pressed.
+	return keyStates_[key/8] & (1 << ((key%8)-1));
+}
+
+uint8_t pt6311::readSwitch(){
+	digitalWrite(STB, LOW);
+	SPI.transfer(0b01000011);
+	uint8_t swData = SPI.transfer(0b01000011);	//Read switch data
+	digitalWrite(STB, HIGH);
+	return swData;
+}
+
+bool pt6311::switchRead(uint8_t sw){
+	return readSwitch() & (1 << (sw-1));
+}

@@ -1,5 +1,8 @@
 #include <SPI.h>
 #include <avr/pgmspace.h>
+
+#include "fonts.h"
+
 #pragma once
 #define COMMAND_1 0b00000000
 #define COMMAND_2 0b01000000
@@ -39,35 +42,45 @@
 class pt6311{
   private:
     const int spi_timeout = 25;
-    int CS;
-    int numOfDigit;
-    int displayState;
-    int displayBrighthess;
-    int buf[16];
+    uint8_t STB;
+    uint8_t numOfDigit;
+    uint8_t displayState;
+    uint8_t displayBrighthess;
 	uint8_t ledState_;
+	uint8_t keyStates_[6];
+	unsigned char displayBuffer[12];
+	
+	void setLeds(uint8_t data);
+	void SendByte(uint8_t data);
     
   public:
-  void SendByte(byte data);
-    short int symbolList[512];
-    pt6311(int CS_pin, int num_Of_Digit);
-    void setBrightness(int br); // from 0 to 7
-    void displayOn();
-    void displayOff();
-    int getBrightness(); //return brightness
+  
+    pt6311(uint8_t STB_pin, uint8_t num_Of_Digit);
+    void setBrightness(uint8_t br); // from 0 to 7
+    void displayOn(void);
+    void displayOff(void);
+    uint8_t getBrightness(); //return brightness
     bool getState(); // return on or off
-    void setDigit(int pos, char _data); // pos from 0 to numOfDigit
-	void setLeds(int data);
-	void ledWrite(uint8_t number, uint8_t state);
 	
-	void writeDigit(int pos, char _data);
-	void cmd2(void);
-	void writeChar(int pos, char _data);
-	void writeLine(int pos, char _data);
+	void ledWrite(uint8_t number, uint8_t state);
+	void writeChar(uint8_t pos, unsigned char data);
+	void writeLine(void);
+	void getBytes(uint8_t *first, uint8_t *second, uint8_t pos);
+	void writeString(uint8_t pos, unsigned char data[]);
+	void writeString(uint8_t pos, const char data[]);
+	void setCursor(uint8_t pos);
+	void print(uint8_t pos, const char data[]);
+	void clearBuffer(void);
+	void readKeypad();
+	uint8_t readSwitch();
+	bool switchRead(uint8_t sw);
+	bool isPressed(uint8_t key);
 };
-//								MSB										LSB
-//								  1  2 3 4 5 6 7 8 9  10 11 12 13 14 15 16
-// bit position -> character map: 0 DP N M L K J H G2 G1 F  E  D  C  B  A
 /*
+	Adafruit					 1  2 3 4 5 6 7 8 9  10 11 12 13 14 15 16
+	bit position -> segment map: 0 DP N M L K J H G2 G1 F  E  D  C  B  A
+	(source: https://learn.adafruit.com/14-segment-alpha-numeric-led-featherwing/usage )
+	
 	C1-1 = L
 	C1-2 = E
 	C1-3 = G2
@@ -102,118 +115,7 @@ class pt6311{
 	13-13
 	14-4
 	15-10
-	
+
+//bit permutation code generated using: http://programming.sirrida.de/calcperm.php	
 8 9 14 15 0 5 6 7 2 3 11 1 12 13 4 10
-9 10 15 16 1 6 7 3 4 12 2 13 14 5 11
 */
-static const uint16_t alphafonttable[] PROGMEM = {
-
-    0b0000000000000001, 0b0000000000000010, 0b0000000000000100,
-    0b0000000000001000, 0b0000000000010000, 0b0000000000100000,
-    0b0000000001000000, 0b0000000010000000, 0b0000000100000000,
-    0b0000001000000000, 0b0000010000000000, 0b0000100000000000,
-    0b0001000000000000, 0b0010000000000000, 0b0100000000000000,
-    0b1000000000000000, 0b0000000000000000, 0b0000000000000000,
-    0b0000000000000000, 0b0000000000000000, 0b0000000000000000,
-    0b0000000000000000, 0b0000000000000000, 0b0000000000000000,
-    0b0001001011001001, 0b0001010111000000, 0b0001001011111001,
-    0b0000000011100011, 0b0000010100110000, 0b0001001011001000,
-    0b0011101000000000, 0b0001011100000000,
-    0b0000000000000000, //
-    0b0000000000000110, // !
-    0b0000001000100000, // "
-    0b0001001011001110, // #
-    0b0001001011101101, // $
-    0b0000110000100100, // %
-    0b0010001101011101, // &
-    0b0000010000000000, // '
-    0b0010010000000000, // (
-    0b0000100100000000, // )
-    0b0011111111000000, // *
-    0b0001001011000000, // +
-    0b0000100000000000, // ,
-    0b0000000011000000, // -
-    0b0000000000000000, // .
-    0b0000110000000000, // /
-    0b0000110000111111, // 0
-    0b0000000000000110, // 1
-    0b0000000011011011, // 2
-    0b0000000010001111, // 3
-    0b0000000011100110, // 4
-    0b0010000001101001, // 5
-    0b0000000011111101, // 6
-    0b0000000000000111, // 7
-    0b0000000011111111, // 8
-    0b0000000011101111, // 9
-    0b0001001000000000, // :
-    0b0000101000000000, // ;
-    0b0010010000000000, // <
-    0b0000000011001000, // =
-    0b0000100100000000, // >
-    0b0001000010000011, // ?
-    0b0000001010111011, // @
-    0b0000000011110111, // A
-    0b0001001010001111, // B
-    0b0000000000111001, // C
-    0b0001001000001111, // D
-    0b0000000011111001, // E
-    0b0000000001110001, // F
-    0b0000000010111101, // G
-    0b0000000011110110, // H
-    0b0001001000000000, // I
-    0b0000000000011110, // J
-    0b0010010001110000, // K
-    0b0000000000111000, // L
-    0b0000010100110110, // M
-    0b0010000100110110, // N
-    0b0000000000111111, // O
-    0b0000000011110011, // P
-    0b0010000000111111, // Q
-    0b0010000011110011, // R
-    0b0000000011101101, // S
-    0b0001001000000001, // T
-    0b0000000000111110, // U
-    0b0000110000110000, // V
-    0b0010100000110110, // W
-    0b0010110100000000, // X
-    0b0001010100000000, // Y
-    0b0000110000001001, // Z
-    0b0000000000111001, // [
-    0b0010000100000000, //
-    0b0000000000001111, // ]
-    0b0000110000000011, // ^
-    0b0000000000001000, // _
-    0b0000000100000000, // `
-    0b0001000001011000, // a
-    0b0010000001111000, // b
-    0b0000000011011000, // c
-    0b0000100010001110, // d
-    0b0000100001011000, // e
-    0b0000000001110001, // f
-    0b0000010010001110, // g
-    0b0001000001110000, // h
-    0b0001000000000000, // i
-    0b0000000000001110, // j
-    0b0011011000000000, // k
-    0b0000000000110000, // l
-    0b0001000011010100, // m
-    0b0001000001010000, // n
-    0b0000000011011100, // o
-    0b0000000101110000, // p
-    0b0000010010000110, // q
-    0b0000000001010000, // r
-    0b0010000010001000, // s
-    0b0000000001111000, // t
-    0b0000000000011100, // u
-    0b0010000000000100, // v
-    0b0010100000010100, // w
-    0b0010100011000000, // x
-    0b0010000000001100, // y
-    0b0000100001001000, // z
-    0b0000100101001001, // {
-    0b0001001000000000, // |
-    0b0010010010001001, // }
-    0b0000010100100000, // ~
-    0b0011111111111111,
-
-};
