@@ -1,3 +1,7 @@
+/*
+ * VFDTEST.ino
+ * Simple program to test the functions of the VHD-module by H3ndrik-Jan
+ */
 #include <pt6311.h>
 
 //Call the constructor for the PT6311-class
@@ -7,12 +11,14 @@ void setup() {
   delay(200);
   Serial.begin(9600);
 }
+uint8_t br = 0;
 void loop() {
   //print text
+  VFD.setBrightness(br);
+  if(++br>7) br=0;
   VFD.clearBuffer();
   VFD.print(0, "Test Message");
   delay(1000);
-
   //Read and print high inputs
   VFD.clearBuffer();
   uint8_t curPos = 0;
